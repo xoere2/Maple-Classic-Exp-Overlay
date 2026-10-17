@@ -81,6 +81,7 @@ class Timeline:
         self.parties = [(self.eff(e.t), int(e.get("size") or 1)) for e in ev if e.kind == "party"]
         self.levels = [(self.eff(e.t), e.get("level")) for e in ev if e.kind == "level"]
         self.last_exp = next((e.data for e in reversed(ev) if e.kind == "exp" and "exp" in e.data), None)
+        self._splits = {}
 
     # ---- the effective clock
     def is_excluded(self, t):
@@ -189,20 +190,24 @@ class Timeline:
         segs.append((start, end, cur))
         return segs
 
-    def _value_at(self, segs, t):
-        for a, b, v in segs:
-            if a <= t <= b:
-                return v
-        return segs[-1][2] if segs else None
+    def _value_at(self, segs, t, starts=None):
+        if not segs:
+            return None
+        starts = starts or [a for a, _, _ in segs]
+        i = max(0, bisect_right(starts, t) - 1)
+        if i > 0 and t == segs[i][0] and t <= segs[i - 1][1]:
+            i -= 1                                  # a boundary belongs to the earlier stretch
+        return segs[i][2]
 
     def _split(self, segs):
         out = {}
         for a, b, v in segs:
             d = out.setdefault(v, {"exp": 0.0, "real_seconds": 0.0, "active_seconds": 0.0})
             d["real_seconds"] += b - a
+        starts = [a for a, _, _ in segs]
         for g, amount in self.gains:
-            out.setdefault(self._value_at(segs, g), {"exp": 0.0, "real_seconds": 0.0, "active_seconds": 0.0})
-            out[self._value_at(segs, g)]["exp"] += amount
+            v = self._value_at(segs, g, starts)
+            out.setdefault(v, {"exp": 0.0, "real_seconds": 0.0, "active_seconds": 0.0})["exp"] += amount
         pairs = self._active_pairs() if self.auto_pause else [(0.0, self.real_seconds)]
         for a, b in pairs:
             for sa, sb, v in segs:                  # split each stretch at the boundaries
@@ -215,11 +220,15 @@ class Timeline:
         return out
 
     def by_map(self):
-        return self._split(self._segments(self.maps, "Unknown map"))
+        if "map" not in self._splits:
+            self._splits["map"] = self._split(self._segments(self.maps, "Unknown map"))
+        return self._splits["map"]
 
     def by_party(self):
         """Per party size (1 = solo)."""
-        return self._split(self._segments(self.parties, 1))
+        if "party" not in self._splits:
+            self._splits["party"] = self._split(self._segments(self.parties, 1))
+        return self._splits["party"]
 
     def solo_vs_party(self):
         sizes = self.by_party()

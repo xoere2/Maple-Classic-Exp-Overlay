@@ -312,7 +312,9 @@ class FarmOverlay:
             for v, *_ in self.rows.values():
                 v.set("—")
             return
-        rep = self.report = self.rec.report(now, prices, skills, monsters, self.settings())
+        # Every 2 s, a little less often in very long sessions (a 4-hour one: every ~5 s).
+        every = 2.0 + len(self.rec.events) / 10000
+        rep = self.report = self.rec.report(now, prices, skills, monsters, self.settings(), every=every)
         if rep is None:
             return
         g = lambda k: rep.get(k) if isinstance(rep.get(k), Metric) else Metric()

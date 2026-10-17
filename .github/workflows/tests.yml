@@ -24,3 +24,11 @@ jobs:
         run: python -m pip install --require-hashes -r requirements-build.txt
       - name: Logic tests
         run: python tests/test_logic.py
+      - name: Farm analytics tests (fork)
+        run: |
+          python tests/test_farm.py
+          python tests/test_vision.py
+          python tests/test_video.py
+          python tests/test_perf.py
+      - name: Overlay window smoke test (fork)
+        run: python tests/test_ui.py

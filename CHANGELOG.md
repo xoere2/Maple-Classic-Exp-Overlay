@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.9.6-farm.1 (Farm Analytics fork)
+
+Fork of 0.9.6-beta (plus upstream's unreleased changes up to 1869c60). See FORK.md.
+
+**New**
+- **Real EXP/hr** is the big number: idle time (waiting for respawns, crowded maps) counts; Pause and AFK don't. Active EXP/hr (the original rule) is shown next to it. The inactivity rule can be changed or turned off.
+- Last 1, 5 and 15 minutes; EXP per map and solo vs party; deaths recorded but never subtracted.
+- **AFK** button and Shift+5 hotkey.
+- **Sessions** saved with all their raw observations in `farm.db` (SQLite); a new session per map (optional). Original log lines are imported read-only.
+- **Mesos accounting without double counting**: realized net, pickups, purchases/sales/storage/transfer notes, consumables used, stock change, loot value, operating profit, estimated total. Big unexplained wallet changes are flagged.
+- **HP and MP** read from the status bar: MP spent, casts (e.g. Lucky Seven at 16 MP), potions drunk (estimated), damage taken.
+- **Prices, skills and monster info** you can edit (CSV import); inventory snapshots; session tags (attack mode, weapon, monster).
+- **Analytics window**: session details with every metric's kind and confidence, raw observations, comparison, rankings (incl. best EXP/hr without losing mesos), map efficiency, charts, drop rates with 95% intervals, CSV/JSON export, weapon what-if.
+- **Recorded video analysis** (OBS recordings), on your PC.
+- **EXPERIMENTAL monster vision** (off by default): kills with confidence labels (confirmed / probable / party credit / unattributed), observed respawns in a selected region, waves, attacks per kill.
+- Command line: `py -3 -m farmkit`.
+
+**Changed**
+- Updates and bug reports point to this fork. The build keeps OpenCV's video reader (for recordings).
+
+**Unchanged**
+- Everything the original does, its log format and seals, and its opt-in sharing (no new fields shared).
+
 ## Not released yet
 
 **New**

@@ -1,5 +1,7 @@
 <h1><img src="docs/icon.png" width="40" align="top"> Maple Classic Exp Overlay</h1>
 
+> **Farm Analytics fork.** This is [xoere2/Maple-Classic-Exp-Overlay](https://github.com/xoere2/Maple-Classic-Exp-Overlay), a fork of [beanguri's original](https://github.com/beanguri/Maple-Classic-Exp-Overlay). It adds real vs active EXP/hr, mesos accounting without double counting, HP/MP, notes, an Analytics window, recorded-video analysis and experimental monster vision. **Start with [FORK.md](FORK.md).** The rest of this README is the original's and still applies.
+
 **A free EXP tracker for MapleStory Classic World.** A small window sits next to the game and shows how fast you're leveling and making mesos, and the [best maps for your class](https://maple-classic-exp-overlay.pages.dev).
 
 **[Download it here](../../releases/latest)** · [How to install](#how-to-install)

@@ -123,10 +123,16 @@ class GaugeSeries:
     """What a session's HP/MP readings say. `events` are 'gauge' events (any order)."""
 
     def __init__(self, events, levels=()):
-        self.points = sorted((e.t, e.data) for e in events if e.kind == "gauge")
+        self.points = sorted(((e.t, e.data) for e in events if e.kind == "gauge"), key=lambda p: p[0])
         self.level_times = sorted(t for t in levels)
+        self._cache = {}
 
     def _deltas(self, key):
+        if key not in self._cache:
+            self._cache[key] = self._work_out_deltas(key)
+        return self._cache[key]
+
+    def _work_out_deltas(self, key):
         out = []
         for (ta, a), (tb, b) in zip(self.points, self.points[1:]):
             if a.get(key) is None or b.get(key) is None:

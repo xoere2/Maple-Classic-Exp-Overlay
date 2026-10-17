@@ -7,7 +7,7 @@
 #   it. A release that's already published is never changed from here.
 # - "Run workflow" (Actions tab) just builds, and leaves the zip on the run's page.
 #
-# Check a download:   gh attestation verify <the zip> --repo beanguri/Maple-Classic-Exp-Overlay
+# Check a download:   gh attestation verify <the zip> --repo xoere2/Maple-Classic-Exp-Overlay
 #
 # Signing switches on once SignPath has accepted the project: add the secret
 # SIGNPATH_API_TOKEN and the variable SIGNPATH_ORGANIZATION_ID (Settings > Secrets and
@@ -49,6 +49,11 @@ jobs:
         run: |
           python tests/test_logic.py
           python tests/test_screen.py
+          python tests/test_farm.py
+          python tests/test_vision.py
+          python tests/test_video.py
+          python tests/test_perf.py
+          python tests/test_ui.py
       - name: Build
         run: python build.py
       - name: Keep the unsigned build

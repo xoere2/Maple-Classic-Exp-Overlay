@@ -86,6 +86,11 @@ class Ledger:
     def unexplained_jumps(self):
         """Big wallet changes with no transaction noted near them (likely a shop visit,
         storage or trade nobody wrote down). They make 'realized' numbers less certain."""
+        if getattr(self, "_jumps", None) is None:
+            self._jumps = self._find_jumps()
+        return self._jumps
+
+    def _find_jumps(self):
         jumps, notes = [], [e.t for e in self.txns if e.get("type") not in ("loot", "use")]
         for (ta, va), (tb, vb) in zip(self.wallet, self.wallet[1:]):
             big = abs(vb - va) > max(5000, self.jump_threshold * max(va, vb, 1))

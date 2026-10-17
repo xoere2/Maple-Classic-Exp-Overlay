@@ -37,11 +37,15 @@ TESSERACT = Path(os.environ.get("TESSERACT_DIR", r"C:\Program Files\Tesseract-OC
 BUILD, RELEASE = ROOT / "build", ROOT / "release"
 
 # Parts of the libraries that are never used, left out to make the download smaller:
-# OpenCV's video player (the screen is read with mss, never from a video) and Pillow's
-# AVIF support (only PNGs are made). Both are only loaded when they're used.
-UNUSED = ["_internal/cv2/opencv_videoio_ffmpeg*.dll", "_internal/PIL/_avif*.pyd"]
+# Pillow's AVIF support (only PNGs are made). (Upstream also leaves out OpenCV's video
+# reader; the fork keeps it, for Analytics > Recorded video.)
+UNUSED = ["_internal/PIL/_avif*.pyd"]
 
-READ_ME_FIRST = f"""{NAME} v{VERSION}  (beta)
+READ_ME_FIRST = f"""{NAME} v{VERSION}  (beta, Farm Analytics fork)
+
+This is a fork of beanguri/Maple-Classic-Exp-Overlay with farm analytics: real vs active
+EXP/hr, mesos accounting, HP/MP, notes, an Analytics window and recorded-video analysis.
+It uses the same data folder as the original, so your log and settings carry over.
 
 1. Double-click "{NAME}.exe" to start it.
    If Windows says "Windows protected your PC", click "More info", then "Run anyway".

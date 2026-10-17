@@ -60,7 +60,7 @@ except Exception:
     except Exception:
         pass
 
-VERSION = "0.9.6-beta"
+VERSION = "0.9.6-farm.1"     # fork of 0.9.6-beta: farm analytics (see FORK.md)
 WINDOW_TITLE = "Maple Classic Exp Overlay"    # the version is shown in Settings
 OLD_TITLES = ("Maple EXP/hr",)               # what versions before 0.9.3 were called
 
@@ -90,7 +90,7 @@ DEFAULTS = {"gap_seconds": 15, "transparency": 0, "topmost": True,
 # Settings > Size, in %: only these, so the window can't get too small to read or use.
 UI_SCALES = (80, 90, 100, 110, 125, 150, 175, 200)
 STATS_SITE = "https://maple-classic-exp-overlay.pages.dev"       # shared 15-minute runs (server/)
-GITHUB_REPO = "beanguri/Maple-Classic-Exp-Overlay"
+GITHUB_REPO = "xoere2/Maple-Classic-Exp-Overlay"      # the fork (upstream: beanguri/Maple-Classic-Exp-Overlay)
 RELEASES_PAGE = f"https://github.com/{GITHUB_REPO}/releases/latest"
 LATEST_RELEASE_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
