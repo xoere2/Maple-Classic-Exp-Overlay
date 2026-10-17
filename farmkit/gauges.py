@@ -167,20 +167,27 @@ class GaugeSeries:
             n += 1 if d >= room - 1 else max(1, int(round(d / restore)))
         return n
 
-    def casts(self, cost, tolerance=None):
-        """MP drops that are whole multiples of a skill's MP cost: (casts, MP not explained)."""
+    def casts(self, cost, tolerance=None, restore=None):
+        """MP drops that are whole multiples of a skill's MP cost: (casts, MP not explained).
+        With a potion's `restore`, a rise that falls short of it by whole casts (a cast and a
+        potion between two readings) counts those casts too."""
         if not cost:
             return 0, self.spent("mp")
         tolerance = tolerance if tolerance is not None else max(2, 0.15 * cost)
         casts, other = 0, 0
-        for _, d, _, _ in self._deltas("mp"):
-            if d >= 0:
-                continue
-            n = int(round(-d / cost))
-            if n >= 1 and abs(-d - n * cost) <= tolerance * n:
-                casts += n
-            else:
-                other += -d
+        for _, d, before, mx in self._deltas("mp"):
+            if d < 0:
+                n = int(round(-d / cost))
+                if n >= 1 and abs(-d - n * cost) <= tolerance * n:
+                    casts += n
+                else:
+                    other += -d
+            elif restore and d >= 0.5 * restore and (mx is None or before + d < mx):
+                pots = max(1, int(round(d / restore)))
+                short = pots * restore - d
+                n = int(round(short / cost))
+                if n >= 1 and abs(short - n * cost) <= tolerance * n:
+                    casts += n
         return casts, other
 
     def summary(self, mp_potion=None, hp_potion=None, skill=None, party=1):
@@ -202,7 +209,7 @@ class GaugeSeries:
                 note += "; in a party some jumps may be a Cleric's Heal"
             out["hp_potions"] = Metric(n, ESTIMATED, "low" if party > 1 else "medium", note, {"item": hp_potion[0]})
         if skill and skill[1]:
-            casts, other = self.casts(skill[1])
+            casts, other = self.casts(skill[1], restore=mp_potion[1] if mp_potion else None)
             out["skill_casts"] = Metric(casts, ESTIMATED, "medium",
                                         f"MP drops matching {skill[1]} MP per {skill[0]}; {other:,} MP spent otherwise",
                                         {"skill": skill[0], "other_mp": other})

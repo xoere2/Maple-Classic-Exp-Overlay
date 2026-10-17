@@ -46,6 +46,10 @@ import numpy as np
 import pytesseract
 from PIL import Image, ImageDraw, ImageTk
 
+# Fork: farm analytics (sessions in farm.db, real EXP/hr, mesos accounting, HP/MP, monsters).
+from farmkit.gauges import GaugeConfirm
+from farmkit.overlay import FarmOverlay, farm_config, read_status_gauges
+
 # Use physical pixels so window positions, tkinter and mss screenshots all agree on
 # scaled displays.
 try:
@@ -272,8 +276,10 @@ def post_runs(install, runs, timeout=15):
 # never touch the game. They're only on while MapleStory or the overlay is the window in
 # front, so other programs can still use those keys (e.g. to type "!").
 
-HOTKEY_ACTIONS = {"start": "Start / Pause", "reset": "Reset", "skip": "Don't log", "compact": "Compact"}
-DEFAULT_HOTKEYS = {"start": "Shift+1", "reset": "Shift+2", "skip": "Shift+3", "compact": "Shift+4"}
+HOTKEY_ACTIONS = {"start": "Start / Pause", "reset": "Reset", "skip": "Don't log", "compact": "Compact",
+                  "afk": "AFK"}
+DEFAULT_HOTKEYS = {"start": "Shift+1", "reset": "Shift+2", "skip": "Shift+3", "compact": "Shift+4",
+                   "afk": "Shift+5"}
 _HOTKEY_MODS = {"Ctrl": 0x2, "Alt": 0x1, "Shift": 0x4}          # MOD_CONTROL, MOD_ALT, MOD_SHIFT
 
 
@@ -1295,6 +1301,8 @@ class ScreenReader:
         self.exp_anchor = None      # where the EXP number starts, relative to the game window
         self.job = None             # the class shown in the status bar
         self.next_job_read = 0.0
+        self.read_hpmp = True       # fork: HP/MP from the status line
+        self.gauge_confirm = GaugeConfirm()
 
     def use_window(self):
         self.mode, self.hwnd, self.box = "window", None, None
@@ -1338,6 +1346,10 @@ class ScreenReader:
             reading = self._read_extras(sct, rect, reading._replace(map=name, note=note))
             if self.exp_anchor and self.mode == "window":
                 self._read_job(sct, rect)
+                if self.read_hpmp and self.templates:
+                    reading = reading._replace(gauges=read_status_gauges(
+                        sct, rect, self.exp_anchor, self.gh, self.templates, self.gauge_confirm,
+                        self._covered, grab))
         return reading
 
     def _read_job(self, sct, rect):
@@ -2653,7 +2665,7 @@ LOG_HINT = "Right-click a line to copy, rename or delete it."
 class App:
     def __init__(self, root, templates):
         self.root = root
-        self.cfg = {**DEFAULTS, **load_config()}
+        self.cfg = farm_config({**DEFAULTS, **load_config()})
         mode = self.cfg.get("mode", "window")
         self.reader = ScreenReader(templates, mode, self.cfg.get("region"))
         saved = self.cfg.get("mesos_box")
@@ -2666,6 +2678,9 @@ class App:
         self.last_mesos = None
         self.rejected = 0
         self.autolog = AutoLog(self.cfg["gap_seconds"])
+        self.session.auto_pause = self.cfg["auto_pause"]
+        self.reader.read_hpmp = self.cfg["read_hpmp"]
+        self.farm = FarmOverlay(self, DATA_DIR, VERSION, LOG_PATH)
         self.map_name = None
         self.level = None
         self.note = None
@@ -2710,8 +2725,8 @@ class App:
         root.columnconfigure(1, weight=1)                 # the log gets any extra room
         root.rowconfigure(0, weight=1)
         self.vars = {}
-        tk.Label(main, text="EXP / hr", bg=BG, fg=DIM, font=self.fonts["text"]).grid(
-            row=0, column=0, sticky="w", padx=12, pady=(10, 0))
+        self.big_title = tk.Label(main, text=self.farm.headline_title(), bg=BG, fg=DIM, font=self.fonts["text"])
+        self.big_title.grid(row=0, column=0, sticky="w", padx=12, pady=(10, 0))
         corner = tk.Frame(main, bg=BG)
         corner.grid(row=0, column=1, sticky="ne", padx=(0, 6), pady=(4, 0))
         small = dict(bg=BG, fg=DIM, activebackground=FIELD, activeforeground=FG, relief="flat",
@@ -2750,8 +2765,10 @@ class App:
         self.compact_line.grid(row=3, column=0, columnspan=2, sticky="w", padx=12)
         self.compact_line.grid_remove()
 
+        self.farm.build(main, self.fonts, {"BG": BG, "FG": FG, "DIM": DIM, "FIELD": FIELD, "ACCENT": ACCENT,
+                                           "ACCENT_SOFT": ACCENT_SOFT}, len(rows) + 3)
         bar = tk.Frame(main, bg=BG)
-        bar.grid(row=len(rows) + 3, column=0, columnspan=2, pady=(10, 4), padx=8)
+        bar.grid(row=len(rows) + 4, column=0, columnspan=2, pady=(10, 4), padx=8)
         btn = dict(bg=FIELD, fg=FG, activebackground="#3a3f49", activeforeground=FG,
                    relief="flat", padx=8, pady=3, font=self.fonts["text"])
         self.start_btn = tk.Button(bar, text="Start", command=self.toggle, **btn)
@@ -2776,7 +2793,7 @@ class App:
         self.status = tk.StringVar()
         self.status_label = tk.Label(main, textvariable=self.status, bg=BG, fg=DIM, font=self.fonts["small"],
                                      justify="left")
-        self.status_label.grid(row=len(rows) + 4, column=0, columnspan=2, sticky="w", padx=12, pady=(0, 8))
+        self.status_label.grid(row=len(rows) + 5, column=0, columnspan=2, sticky="w", padx=12, pady=(0, 8))
         self._fit_status()
 
         self._build_log_panel()
@@ -2907,6 +2924,7 @@ class App:
         else:
             self.log_btn.pack(side="left", before=self.compact_btn)
         self.compact_btn.config(text="Full" if on else "Compact")
+        self.farm.set_compact(on)
         self._fit_status()
         if not on and self.cfg.get("log_open"):
             self.toggle_log(remember=False)
@@ -3193,6 +3211,8 @@ class App:
         style = dict(bg=FIELD, fg=FG, activebackground="#3a3f49", activeforeground=FG, relief="flat",
                      padx=12, pady=3, font=self.fonts["text"])
         tk.Button(buttons, text="Open data folder", command=self.open_data_folder, **style).pack(side="left")
+        tk.Button(buttons, text="Farm settings", command=lambda: self.farm.settings_dialog(w),
+                  **style).pack(side="left", padx=(6, 0))
         tk.Button(buttons, text="Check for updates", command=lambda: self.check_updates(manual=True),
                   **style).pack(side="left", padx=(6, 0))
         tk.Button(buttons, text="Report a bug", command=lambda: self.report_bug(w),
@@ -3444,6 +3464,10 @@ class App:
                     self._sharing = False
                     if payload:
                         self.autolog.mark_shared(payload)
+                elif kind == "vision":
+                    self.farm.on_vision(payload)
+                elif kind == "vision_frame":
+                    self.farm.on_vision_frame(payload)
                 else:
                     self._handle(payload)
         except queue.Empty:
@@ -3485,7 +3509,7 @@ class App:
         if r.candidates:
             if self.found_at is None or t.req is not None:
                 self.found_at = now
-            before = t.gained
+            before, before_raw = t.gained, t.raw_gained
             ok, note = self.session.observe(r.candidates, r.confident, now)
             self.rejected = 0 if ok else self.rejected + 1
             if self.rejected >= 10:                 # keeps not adding up: find the EXP bar again
@@ -3498,6 +3522,7 @@ class App:
                 self.level_up_at = now
                 if self.level:
                     self.level += 1             # until the new level's EXP confirms it
+            self.farm.on_exp(now, t.raw_gained - before_raw, note, t, level_for_req(t.req) or self.level)
             status = self._status_for(note)
         else:
             status = r.where
@@ -3505,6 +3530,7 @@ class App:
             status += f"\n{self.note}"
         self.status.set(status)
         self.level = level_for_req(t.req) or self.level
+        self.farm.on_reading(r, now)
         self._log_tick(now)
 
     def _status_for(self, note):
@@ -3562,7 +3588,8 @@ class App:
 
     def _update_display(self):
         t, now = self.tracker, time.monotonic()
-        rate = t.rate()
+        self.farm.refresh(now, t)
+        rate = self.farm.headline_rate(t)
         self.big.config(text=fmt_num(rate) if rate is not None else "—",
                         fg=ACCENT if rate is not None else DIM)
         self.vars["Last 5 min"].set(fmt_num(t.rolling_rate()))
@@ -3589,8 +3616,9 @@ class App:
         self.vars["Mesos / 5 min"].set(fmt_num(m.per_5min(el)))
         self.vars["Elapsed"].set(fmt_dur(el))
         if self.compact:
+            farm = self.farm.compact_text()
             self.compact_line.config(text=f"Last 5 min  {self.vars['Last 5 min'].get()}    "
-                                          f"Mesos / hr  {self.vars['Mesos / hr'].get()}")
+                                          + (farm or f"Mesos / hr  {self.vars['Mesos / hr'].get()}"))
         waiting = self.session.waiting
         self.session.tick(now)
         if self.session.waiting != waiting:             # just paused by itself: say why now
@@ -3613,6 +3641,9 @@ class App:
         elif action == "skip":
             self.toggle_skip_log()
             done = "not logging this run" if self.skip_log else "logging this run again"
+        elif action == "afk":
+            self.farm.toggle_afk()
+            return
         else:
             self.set_compact(not self.compact)
             return
@@ -3622,9 +3653,11 @@ class App:
     def toggle(self):
         if self.session.on:                     # (also while it's paused by itself)
             self.session.pause()
+            self.farm.on_pause(time.monotonic())
             self.start_btn.config(text="Resume")
         else:
             self.session.start(time.monotonic())
+            self.farm.on_start(time.monotonic())
             self.reader.request_map()           # read the map name now
             self.start_btn.config(text="Pause")
         self.autolog.reset_clock()
@@ -3632,6 +3665,7 @@ class App:
             self.status.set(self._status_for(""))   # right away, not at the next read
 
     def reset(self):
+        self.farm.on_reset(time.monotonic())
         self.session.reset()
         self.autolog.reset_clock()
         self.skip_log = False
@@ -3850,6 +3884,10 @@ class App:
 
     def close(self):
         self.stop_evt.set()
+        try:
+            self.farm.on_close(time.monotonic())
+        except Exception as e:
+            log_error("saving the farm session", e)
         try:
             self._remember_log_size()
         except Exception as e:

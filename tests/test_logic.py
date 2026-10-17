@@ -161,8 +161,9 @@ t, _ = farm(log, 0, 600)
 farm(log, t, 600, map_name="The Swamp of Despair I")
 check("a new map restarts the run", len(log.runs) == 0)
 # ---- hotkeys
-check("hotkeys: Shift+1 to 4 by default", m.DEFAULT_HOTKEYS == {"start": "Shift+1", "reset": "Shift+2",
-                                                               "skip": "Shift+3", "compact": "Shift+4"})
+check("hotkeys: Shift+1 to 4 by default (fork: + Shift+5 AFK)",
+      m.DEFAULT_HOTKEYS == {"start": "Shift+1", "reset": "Shift+2", "skip": "Shift+3", "compact": "Shift+4",
+                            "afk": "Shift+5"})
 check("a hotkey needs Ctrl, Alt or Shift (or an F key), so it can't block plain typing",
       m.parse_hotkey("Shift+1") == (4, 0x31) and m.parse_hotkey("F5") == (0, 0x74)
       and m.parse_hotkey("A") is None and m.parse_hotkey("Win+1") is None and m.parse_hotkey("Shift+!") is None)
@@ -172,7 +173,7 @@ m.CONFIG_PATH.write_text(json.dumps({"hotkeys": {"start": "Ctrl+Q", "reset": "",
                                      "ui_scale": 3, "compact": "yes"}))
 cfg = m.load_config()
 check(f"hotkeys from the settings file: kept if valid or off, else the default ({cfg['hotkeys']})",
-      cfg["hotkeys"] == {"start": "Ctrl+Q", "reset": "", "skip": "Shift+3", "compact": "Shift+4"})
+      cfg["hotkeys"] == {"start": "Ctrl+Q", "reset": "", "skip": "Shift+3", "compact": "Shift+4", "afk": "Shift+5"})
 check("a size or compact setting edited by hand can't break the window", cfg["ui_scale"] == 100 and cfg["compact"] is False)
 pressed = []
 hk = m.Hotkeys(pressed.append)
