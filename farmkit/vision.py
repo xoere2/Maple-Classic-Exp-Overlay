@@ -91,12 +91,17 @@ def _iou(a, b):
     return inter / (a.w * a.h + b.w * b.h - inter + 1e-9)
 
 
+LIVE_THRESHOLD = 0.75       # lossless screen capture
+VIDEO_THRESHOLD = 0.55      # compressed recordings score lower (true matches ~0.6-0.75, clutter ~0.3)
+
+
 class SpriteDetector:
     """Finds monsters by their sprites (BGRA images with transparency, or BGR).
     Both facing directions are tried, at the given scales (game window size vs the size the
     sprites were cropped at)."""
 
-    def __init__(self, sprites, threshold=0.75, scales=(1.0,), work_scale=1.0, coarse=0.35, max_candidates=24):
+    def __init__(self, sprites, threshold=LIVE_THRESHOLD, scales=(1.0,), work_scale=1.0, coarse=0.3,
+                 max_candidates=24):
         self.threshold, self.work_scale = threshold, work_scale
         self.coarse, self.max_candidates = coarse, max_candidates
         self.templates = []                     # (label, gray template, mask or None)
@@ -118,6 +123,8 @@ class SpriteDetector:
         mask = None
         if img.ndim == 3 and img.shape[2] == 4:
             mask = (img[..., 3] > 127).astype(np.uint8) * 255
+            if min(mask.shape) >= 12:                # skip the outline: video compression smears it
+                mask = cv2.erode(mask, np.ones((3, 3), np.uint8))
             img = img[..., :3]
         img = np.ascontiguousarray(img)
         filled = img.copy()

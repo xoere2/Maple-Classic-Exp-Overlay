@@ -151,6 +151,9 @@ an2 = v.VisionAnalyzer(v.SpriteDetector(SPRITES), damage=v.DamageDetector())
 for i in range(40):
     an2.process(noise.integers(0, 255, (400, 560, 3), dtype=np.uint8), i / 10)
 check("pure noise: nothing detected", an2.events == [])
+an3 = run([], seconds=6, detector=v.SpriteDetector(SPRITES, threshold=v.VIDEO_THRESHOLD))
+check("the lower recording threshold still finds nothing in a busy empty scene",
+      an3.events == [] and max(n for _, n in an3.frames) == 0)
 
 
 def occluded(t):                                          # a "player" walks in front for 0.3 s

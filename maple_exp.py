@@ -1238,8 +1238,8 @@ def find_party_bars(bgr, gh):
 # --------------------------------------------------------------------------- finding it on screen
 
 Reading = namedtuple("Reading", "where candidates confident text image boxes map note "
-                                 "mesos mesos_image mesos_boxes party mesos_at",
-                     defaults=((), False, "", None, (), None, None, None, None, (), None, None))
+                                 "mesos mesos_image mesos_boxes party mesos_at gauges",
+                     defaults=((), False, "", None, (), None, None, None, None, (), None, None, None))
 
 
 def _view(img, lay):
@@ -1684,6 +1684,7 @@ class ExpTracker:
         self.gained = 0
         self.levels = 0
         self.samples = deque()                # (elapsed, gained)
+        self.raw_gained = 0                   # fork: every trusted gain, paused or not (real EXP/hr)
 
     def start(self):
         if not self.running:
@@ -1768,6 +1769,7 @@ class ExpTracker:
         return abs(e / self.req * 100 - p) <= 0.02 + 0.003 * p
 
     def _add_gain(self, amount):
+        self.raw_gained += amount             # fork: farmkit counts idle-time gains too
         if self.running:
             self.gained += amount
             now = self.elapsed()
@@ -2044,6 +2046,7 @@ class Session:
         self.map = None             # the map these numbers are for
         self.here = None            # the map you're on now
         self.last_gain = None
+        self.auto_pause = True      # fork: Settings can switch the idle pause off
 
     def start(self, now):
         self.on, self.waiting, self.last_gain = True, None, now
@@ -2099,7 +2102,7 @@ class Session:
 
     def tick(self, now):
         """Call regularly: pauses after `gap` seconds without EXP."""
-        if self.on and self.exp.running and now - self.last_gain > self.gap:
+        if self.auto_pause and self.on and self.exp.running and now - self.last_gain > self.gap:
             self._wait("idle")
 
 
