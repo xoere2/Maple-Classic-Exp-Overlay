@@ -53,8 +53,8 @@ def render(world, cam_x, view_w, monsters, t, cam_y=0, view_h=None):
         wx = m["x"] + m.get("vx", 0) * (t - m["born"])
         sx, sy = int(wx - cam_x), int(m["y"] - cam_y)
         paste(f, m["sprite"], sx, sy, flip=m.get("vx", 0) > 0)
-        for d in m.get("damage", ()):
-            if d <= t < d + 0.6:                       # numbers float up for a moment
-                h, w = m["sprite"].shape[:2]
-                damage_digits(f, sx + w / 2, sy - 8 - 30 * (t - d))
+        showing = [d for d in m.get("damage", ()) if d <= t < d + 0.6]
+        for k, d in enumerate(showing):                # numbers float up, newer ones stacked above
+            h, w = m["sprite"].shape[:2]
+            damage_digits(f, sx + w / 2, sy - 8 - 30 * (t - d) - 18 * k)
     return f

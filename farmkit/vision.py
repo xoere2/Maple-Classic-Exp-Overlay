@@ -10,7 +10,8 @@ Off by default (Settings > Experimental: monster vision). What it can and can't 
   - In a party, EXP is shared, so EXP after a death doesn't mean you killed it. Party
     kills are never reported as yours.
   - A monster that appears in the middle of the region (not walking or scrolling in from
-    an edge) is a respawn.
+    an edge) is a respawn. Monsters already there when watching starts (or right after a
+    teleport/map change) are "present", not respawns.
 
 Confidence labels for each disappearance:
   confirmed     solo, damage numbers on it, and an EXP gain right after it vanished
@@ -56,6 +57,17 @@ def estimate_shift(prev_gray, gray):
     win = cv2.createHanningWindow(a.shape[::-1], cv2.CV_32F)
     (dx, dy), response = cv2.phaseCorrelate(a, b, win)
     return float(dx), float(dy), float(response)
+
+
+def _ncc(a, b):
+    """Correlation of two same-size frames' edges, unshifted: ~1 for the same scene, ~0 for
+    another. (Edges, so big flat areas like sky or ground don't make two scenes look alike.)"""
+    a = np.abs(cv2.Laplacian(a, cv2.CV_32F))
+    b = np.abs(cv2.Laplacian(b, cv2.CV_32F))
+    a = a - a.mean()
+    b = b - b.mean()
+    d = float(np.sqrt((a * a).sum() * (b * b).sum()))
+    return float((a * b).sum() / d) if d > 0 else 1.0
 
 
 # --------------------------------------------------------------------------- detectors
@@ -194,7 +206,7 @@ class DamageDetector:
         hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
         h, s, v = cv2.split(hsv)
         m = ((h >= self.hue[0]) & (h <= self.hue[1]) & (s >= self.sat) & (v >= self.val)).astype(np.uint8)
-        m = cv2.dilate(m, np.ones((3, 7), np.uint8))
+        m = cv2.dilate(m, np.ones((1, 7), np.uint8))      # join a number's digits, not stacked numbers
         n, _, stats, _ = cv2.connectedComponentsWithStats(m, connectivity=8)
         return [Detection(x + w / 2, y + hh / 2, w, hh, "damage")
                 for x, y, w, hh, a in (map(int, stats[i]) for i in range(1, n)) if self.min_area <= a <= self.max_area]
@@ -235,10 +247,11 @@ class Tracker:
         self.tracks, self.next_id = [], 1
 
     def shift(self, dx, dy):
+        # (first_xy stays where it was first seen *on screen*: that's what tells walking or
+        # scrolling in at the edge from spawning in the middle.)
         for tr in self.tracks:
             tr.x += dx
             tr.y += dy
-            tr.first_xy = (tr.first_xy[0] + dx, tr.first_xy[1] + dy)
 
     def update(self, dets, t):
         """Returns (new confirmed tracks, ended tracks)."""
@@ -300,9 +313,10 @@ class VisionAnalyzer:
     """
 
     def __init__(self, detector, damage=None, edge=0.08, max_dist=1.2, confirm_hits=3,
-                 max_missed=4, big_scroll=0.25):
+                 max_missed=4, big_scroll=0.25, cut_threshold=0.6, settle=0.5):
         self.detector, self.damage = detector, damage
-        self.edge, self.big_scroll = edge, big_scroll
+        self.edge, self.big_scroll, self.cut_threshold = edge, big_scroll, cut_threshold
+        self.settle, self.settle_until = settle, None    # monsters seen right away were already there
         self.tracker = Tracker(max_dist, confirm_hits, max_missed)
         self.events, self.frames = [], []
         self.prev_gray, self.size = None, None
@@ -317,18 +331,25 @@ class VisionAnalyzer:
 
     def process(self, bgr, t):
         t0 = time.perf_counter()
+        if self.settle_until is None:
+            self.settle_until = t + self.settle
         self.size = (bgr.shape[1], bgr.shape[0])
         gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
         small = cv2.resize(gray, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
-        dx, dy, resp = estimate_shift(self.prev_gray, small)
+        prev = self.prev_gray
+        dx, dy, resp = estimate_shift(prev, small)
         self.prev_gray = small
+        cut = False
         if resp < 0.3:
-            dx = dy = 0.0                            # no clear answer: assume the view stayed put
+            dx = dy = 0.0                            # no clear answer: assume the view stayed put...
+            # ...unless the whole picture changed (a teleport, portal or map change)
+            cut = prev is not None and prev.shape == small.shape and _ncc(prev, small) < self.cut_threshold
         dx, dy = dx * 2, dy * 2
-        if abs(dx) > self.big_scroll * self.size[0] or abs(dy) > self.big_scroll * self.size[1]:
+        if cut or abs(dx) > self.big_scroll * self.size[0] or abs(dy) > self.big_scroll * self.size[1]:
             next_id = self.tracker.next_id
             self.tracker = Tracker(self.tracker.max_dist, self.tracker.confirm_hits, self.tracker.max_missed)
             self.tracker.next_id = next_id
+            self.settle_until = t + self.settle
             self.resets += 1                         # a teleport or map change: start over, no events
             dx = dy = 0.0
         if abs(dx) >= 0.5 or abs(dy) >= 0.5:
@@ -351,7 +372,10 @@ class VisionAnalyzer:
             self.prev_damage = [Detection(d.x + dx, d.y + dy, d.w, d.h) for d in found]
         for tr in new:
             x, y = tr.first_xy
-            tr.spawn_kind = "entered" if self._near_edge(x, y, tr.w, tr.h) else "spawn"
+            if tr.first_t <= self.settle_until:
+                tr.spawn_kind = "present"                # on screen when watching (re)started
+            else:
+                tr.spawn_kind = "entered" if self._near_edge(x, y, tr.w, tr.h) else "spawn"
             self.events.append({"t": tr.first_t, "event": tr.spawn_kind, "species": tr.label, "track": tr.id,
                                 "x": round(x), "y": round(y)})
         for tr in ended:
