@@ -93,7 +93,9 @@ class Ledger:
     def _find_jumps(self):
         jumps, notes = [], [e.t for e in self.txns if e.get("type") not in ("loot", "use")]
         for (ta, va), (tb, vb) in zip(self.wallet, self.wallet[1:]):
-            big = abs(vb - va) > max(5000, self.jump_threshold * max(va, vb, 1))
+            # Farming never lowers the wallet, so any real drop is spending, storage or a trade;
+            # a rise is only suspicious when it's far beyond pickups.
+            big = (va - vb) > 5000 or (vb - va) > max(5000, self.jump_threshold * max(va, vb, 1))
             if big and not any(ta - 120 <= t <= tb + 120 for t in notes):
                 jumps.append({"t": tb, "from": va, "to": vb, "change": vb - va})
         return jumps

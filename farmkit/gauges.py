@@ -219,4 +219,10 @@ class GaugeSeries:
             out["skill_casts"] = Metric(casts, ESTIMATED, "medium",
                                         f"MP drops matching {skill[1]} MP per {skill[0]}; {other:,} MP spent otherwise",
                                         {"skill": skill[0], "other_mp": other})
+            plain, _ = self.casts(skill[1])
+            hidden = max(0, casts - plain)          # casts inside a potion's rise: not in the MP drops
+            if hidden:
+                out["mp_spent"] = Metric(self.spent("mp") + hidden * skill[1], ESTIMATED, "medium",
+                                         f"MP drops plus {hidden} {skill[0]} casts hidden by potions in the same reading",
+                                         {"drops": self.spent("mp"), "hidden_casts": hidden})
         return out

@@ -82,6 +82,14 @@ class FrameReader:
         learned = self.mesos_digits
         templates = learned.templates() if learned.complete else self.templates
         field = m.find_mesos_field(img, self.gh)
+        if field:
+            # Storage and trade windows show two mesos boxes (yours and theirs): skip those
+            # frames rather than risk reading the wrong one.
+            x, y, w, h = field
+            other = img.copy()
+            other[y:y + h, x:x + w] = 0
+            if m.find_mesos_field(other, self.gh):
+                return None
         if field and templates and m.read_mesos_positions(img, field, templates) is None:
             field = None
         if field is None:
@@ -144,6 +152,8 @@ def analyze_video(path, store, roi=None, vision=None, exp_every=1.5, vision_fps=
     stats = {"frames": 0, "exp_reads": 0, "exp_ok": 0, "gauge_reads": 0, "mesos_reads": 0, "vision_frames": 0,
              "seconds": 0.0, "fps": fps}
     emitted = 0
+    pending_mesos = None            # (value, when to look again): a reading is confirmed by the
+    last_mesos = None               # same number a moment later (pickups change it between scans)
     t_start = time.perf_counter()
     idx = 0
     try:
@@ -153,7 +163,7 @@ def analyze_video(path, store, roi=None, vision=None, exp_every=1.5, vision_fps=
             t = idx / fps
             if max_seconds and t > max_seconds:
                 break
-            want = t >= next_exp or (vision is not None and t >= next_vis)
+            want = t >= next_exp or (vision is not None and t >= next_vis) or                 (pending_mesos is not None and t >= pending_mesos[1])
             ok = cap.grab()
             if not ok:
                 break
@@ -189,17 +199,31 @@ def analyze_video(path, store, roi=None, vision=None, exp_every=1.5, vision_fps=
                     value = reader.mesos(img)
                     if value is not None:
                         stats["mesos_reads"] += 1
-                        reader.meso.observe(value, t, t, True)
-                        if reader.meso.value is not None:
-                            rec.wallet(t, reader.meso.value)
+                        pending_mesos = (value, t + 0.2)
                     party = reader.party(img)
                     if party:
                         rec.party(t, party)
                 if t >= next_map:
                     next_map = t + map_every
                     name = reader.map_name(img)
-                    if name:
-                        rec.map(t, name)
+                    if name and name == reader.__dict__.get("_last_map"):
+                        rec.map(t, name)            # read the same twice in a row
+                    reader._last_map = name
+            if pending_mesos is not None and t >= pending_mesos[1]:
+                again = reader.mesos(img)
+                if again == pending_mesos[0]:
+                    import maple_exp as m_
+                    # Accept the first number, or one that could follow the last (no digit
+                    # lost or added); a big change needs to be seen at the next scan too.
+                    big = getattr(reader, "_big", None)
+                    if last_mesos is None or m_._agrees(again, last_mesos) or (big is not None and m_._agrees(again, big)):
+                        rec.wallet(t, again)
+                        last_mesos = again
+                        stats["mesos_ok"] = stats.get("mesos_ok", 0) + 1
+                        reader._big = None
+                    else:
+                        reader._big = again         # a jump (shop, storage): believed if the next scan agrees
+                pending_mesos = None
             if vision is not None and t >= next_vis:
                 next_vis = t + 1.0 / vision_fps
                 crop = img if roi is None else img[roi[1]:roi[1] + roi[3], roi[0]:roi[0] + roi[2]]
