@@ -239,6 +239,17 @@ if tpl:
         wrong += bool(got) and (got[0].cur, got[0].max) != (482, 1178)
     check(f"noisy status bars never read a wrong HP ({wrong} wrong of 40)", wrong == 0)
 
+if tpl:
+    # Seen live: with the minimap collapsed, the inventory's tab row was read as a map name,
+    # so opening/closing the inventory looked like changing maps (which reset the mesos).
+    check("the inventory's tab row is never taken for a map name",
+          all(m._looks_like_inventory_tabs(n) for n in ("Use I Set Up Cash Deco", "SetUp te Cash Deco"))
+          and not any(m._looks_like_inventory_tabs(n) for n in ("The Swamp of Despair II", "Ant Tunnel Park")))
+    mt = m.MesoTracker()
+    for i, v in enumerate((365706, 365743, 365760)):         # picking up mesos between readings
+        mt.observe(v, i * 1.5, i * 1.5, True)
+    check(f"mesos show after 3 agreeing readings, even while picking up ({mt.value})", mt.value == 365760)
+
 check("one readout can't be labelled HP or MP", label_gauges([Gauge(1, 2, 0, 0, 7)]) == {})
 lab = label_gauges([Gauge(100, 200, 10, 0, 7), Gauge(50, 80, 50, 0, 7)])
 check("two readouts: HP then MP", lab["hp"].cur == 100 and lab["mp"].cur == 50)

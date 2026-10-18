@@ -887,7 +887,19 @@ def read_map_name(bgr, gh):
     y0, y1 = max(0, min(b.y for b in ln) - 2), max(b.y + b.h for b in ln) + 2
     votes = _ocr_votes(white[y0:y1, x0:x1], max(b.h for b in ln), "--psm 7", _clean_map_name)
     name, n = votes.most_common(1)[0] if votes else (None, 0)
+    if name and _looks_like_inventory_tabs(name):
+        return None             # fork: with the minimap collapsed, the inventory's tabs can be read
     return name if n >= 2 else None
+
+
+_INVENTORY_TABS = {"equip", "use", "setup", "set", "up", "etc", "cash", "deco"}
+
+
+def _looks_like_inventory_tabs(name):
+    """'Use I Set Up Cash Deco': the item inventory's tab row, not a map name."""
+    words = [w.strip(".:'").lower() for w in name.replace("Up", " Up").split()]
+    hits = sum(1 for w in words if w in _INVENTORY_TABS or w.replace("up", "") in ("set", "") and w)
+    return hits >= 2
 
 
 # --------------------------------------------------------------------------- mesos and party
@@ -2018,7 +2030,13 @@ class MesoTracker:
             # out; digit changes can also be different, nearby misreads of an extra digit.
             # About 10x (or a tenth): almost always a digit read too many (or lost).
             tenfold = old is not None and old > 0 and (9 <= value / old <= 11 or 0.09 <= value / old <= 0.11)
-            if old is None or jump or digits_changed:
+            if old is None:
+                # Fork: the very first count needs 3 readings in a row that agree (same digit
+                # count, close together), not 3 identical ones: while farming, pickups change
+                # the number between readings, so identical ones could take minutes.
+                if n < 3:
+                    return
+            elif jump or digits_changed:
                 if same < (8 if tenfold else 3):
                     return
             elif n < (3 if big else 2):
