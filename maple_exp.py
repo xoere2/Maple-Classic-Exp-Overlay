@@ -1216,6 +1216,14 @@ def _agrees(value, last):
     return last is not None and len(str(value)) == len(str(last)) and abs(value - last) <= max(1000, 0.02 * last)
 
 
+def _second_mesos_box(bgr, field, gh):
+    """Fork: is there another solid mesos box besides `field` (storage or trade window)?"""
+    x, y, w, h = field
+    other = bgr.copy()
+    other[y:y + h, x:x + w] = 0
+    return find_mesos_field(other, gh) is not None
+
+
 def find_party_bars(bgr, gh):
     """HP bars of the party list's members: the longest evenly spaced column of identical
     HP-bar outlines. A single bar (or none) means you're on your own."""
@@ -1498,10 +1506,18 @@ class ScreenReader:
                 field = find_mesos_field(img, g)      # the solid box is easy to spot
                 if field and not self._readable(img, field):
                     field = None                      # a white patch in the scene, not the box
+                if field and _second_mesos_box(img, field, g):
+                    # Fork: storage and trade windows show two mesos boxes (storage's and
+                    # yours): don't (re)locate the box from such a look.
+                    field = "skip"
                 # Look for it by its outline too if it's lost, or this window is in the way of
                 # where it was (it may have been moved from there).
                 if field is None and (self.mesos_box is None or self.mesos_fails >= 10 or self.mesos_covered):
                     field = self._find_seethrough_box(img, g)
+                if field == "skip":
+                    field, self.mesos_box, self.in_storage = None, None, True
+                else:
+                    self.in_storage = False
                 if field:
                     box = (sx - wx + field[0], sy - wy + field[1], field[2], field[3])
                     old = self.mesos_box
@@ -1523,7 +1539,7 @@ class ScreenReader:
                                            x1 - x0 + int(2 * g), y1 - y0 + int(2 * g))
         mesos, image, boxes = None, None, ()
         self.mesos_covered = False
-        if self.mesos_box:
+        if self.mesos_box and not getattr(self, "in_storage", False):
             bx, by, bw, bh = self.mesos_box
             # (the digits only need the box and a sliver around it to be seen)
             if self._covered(wx + bx, wy + by, bw, bh, margin=max(2, int(0.3 * bh))):
